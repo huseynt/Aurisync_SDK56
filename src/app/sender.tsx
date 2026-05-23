@@ -10,7 +10,7 @@ export default function SenderScreen() {
   const colorScheme = useColorScheme();
   const dark = colorScheme === "dark";
 
-  const [serverUrl, setServerUrl] = useState("ws://192.168.1.100:8080");
+  const [serverUrl, setServerUrl] = useState("ws://192.168.31.26:8080");
 
   const { status, pin, error, createRoom, disconnect } = useWebRTC({ role: "sender" });
 

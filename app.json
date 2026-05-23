@@ -7,9 +7,14 @@
     "icon": "./assets/images/android-icon-foreground.png",
     "scheme": "aurisyncrtc",
     "userInterfaceStyle": "automatic",
+
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Aurisync uses the microphone to stream audio in real time."
+      }
     },
+
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -18,13 +23,21 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.huseyn.aurisync"
+      "package": "com.huseyn.aurisync",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.WAKE_LOCK"
+      ]
     },
+
     "web": {
       "output": "static",
       "bundler": "metro",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -37,7 +50,15 @@
           }
         }
       ]
+      // [
+      //   "react-native-webrtc",
+      //   {
+      //     "cameraPermission": false,
+      //     "microphonePermission": "Aurisync uses the microphone to stream audio in real time."
+      //   }
+      // ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

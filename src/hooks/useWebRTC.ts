@@ -26,7 +26,21 @@ interface UseWebRTCReturn {
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun.l.google.com:5349" },
 ];
+
+const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> =>
+  new Promise<void>((resolve) => {
+    if (pc.iceGatheringState === "complete") {
+      resolve();
+      return;
+    }
+    // @ts-ignore
+    pc.onicegatheringstatechange = () => {
+      if (pc.iceGatheringState === "complete") resolve();
+    };
+    setTimeout(resolve, 5000);
+  });
 
 export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
   const [status, setStatus] = useState<Status>("idle");
@@ -36,6 +50,7 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const roomIdRef = useRef<string | null>(null);
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
 
@@ -44,11 +59,13 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
       wsRef.current?.close();
       pcRef.current?.close();
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      remoteStreamRef.current?.getTracks().forEach((t) => t.stop());
       if (role === "receiver") InCallManager.stop();
     } catch (_) {}
     wsRef.current = null;
     pcRef.current = null;
     localStreamRef.current = null;
+    remoteStreamRef.current = null;
     roomIdRef.current = null;
     pendingCandidates.current = [];
     setPin(null);
@@ -61,6 +78,8 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
 
     // @ts-ignore
     pc.onicecandidate = (e: any) => {
+      console.log("ICE candidate:", e.candidate?.candidate ?? "null (gathering done)");
+      console.log("ICE candidate WS state:", wsRef.current?.readyState);
       if (e.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
@@ -73,8 +92,19 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
     };
 
     // @ts-ignore
+    pc.ontrack = (e: any) => {
+      if (role === "receiver" && e.streams && e.streams[0]) {
+        remoteStreamRef.current = e.streams[0];
+        InCallManager.start({ media: "audio" });
+        InCallManager.setSpeakerphoneOn(false); 
+        InCallManager.setForceSpeakerphoneOn(false);
+      }
+    };
+
+    // @ts-ignore
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
+      console.log("ICE state:", state);
       if (state === "connected" || state === "completed") {
         setStatus(role === "sender" ? "live" : "receiving");
       } else if (state === "failed" || state === "disconnected") {
@@ -119,9 +149,8 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
         case "peer_joined": {
           if (role !== "sender" || !pc) break;
           try {
-            // Runtime permission sorğusu
             const { PermissionsAndroid, Platform } = await import("react-native");
-            
+
             if (Platform.OS === "android") {
               const granted = await PermissionsAndroid.request(
                 PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
@@ -146,10 +175,12 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
             const offer = await pc.createOffer({});
             await pc.setLocalDescription(new RTCSessionDescription(offer));
 
+            await waitForIceGathering(pc);
+
             wsRef.current?.send(
               JSON.stringify({
                 type: "offer",
-                sdp: offer,
+                sdp: pc.localDescription,
                 roomId: roomIdRef.current,
               })
             );
@@ -182,20 +213,18 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
         case "offer": {
           if (role !== "receiver" || !pc) break;
           try {
-            // iOS + Android audio fix — BEFORE createAnswer
-            InCallManager.start({ media: "audio" });
-            InCallManager.setSpeakerphoneOn(true);
-
             await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
             await addPendingCandidates(pc);
 
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(new RTCSessionDescription(answer));
 
+            await waitForIceGathering(pc);
+
             wsRef.current?.send(
               JSON.stringify({
                 type: "answer",
-                sdp: answer,
+                sdp: pc.localDescription,
                 roomId: roomIdRef.current,
               })
             );
@@ -251,15 +280,19 @@ export function useWebRTC({ role }: UseWebRTCOptions): UseWebRTCReturn {
 
       ws.onmessage = (e) => handleMessage(e.data);
 
-      ws.onerror = () => {
-        setError("Cannot reach signaling server.");
+      ws.onerror = (e: any) => {
+        const msg = e?.message || JSON.stringify(e) || "WebSocket error";
+        setError(`WS Error: ${msg}`);
         setStatus("error");
         cleanup();
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e: any) => {
         if (status === "live" || status === "receiving") {
-          setError("Server connection closed.");
+          setError(`WS Closed: code=${e.code} reason=${e.reason || "none"}`);
+          setStatus("error");
+        } else if (status === "connecting") {
+          setError(`WS Closed during connect: code=${e.code}`);
           setStatus("error");
         }
       };
