@@ -1,30 +1,86 @@
-import { View, Text, TextInput, Pressable, StatusBar, ActivityIndicator } from "react-native";
+import {
+  View, Text, TextInput, Pressable,
+  StatusBar, ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useWebRTC } from "@/hooks/useWebRTC";
+import { useWebRTC, AudioOutput } from "@/hooks/useWebRTC";
+
+function SegmentControl<T extends string>({
+  options, value, onChange, dark,
+}: {
+  options: { label: string; value: T }[];
+  value: T;
+  onChange: (v: T) => void;
+  dark: boolean;
+}) {
+  return (
+    <View className={`flex-row rounded-xl p-1 ${dark ? "bg-zinc-800" : "bg-zinc-200"}`}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => onChange(o.value)}
+            className={`flex-1 py-2 rounded-lg items-center ${active ? (dark ? "bg-zinc-600" : "bg-white") : ""}`}
+          >
+            <Text className={`text-xs font-medium ${
+              active ? (dark ? "text-white" : "text-zinc-900") : (dark ? "text-zinc-400" : "text-zinc-500")
+            }`}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function outputIcon(o: AudioOutput): keyof typeof Ionicons.glyphMap {
+  switch (o) {
+    case "speaker": return "volume-high-outline";
+    case "headset": return "headset-outline";
+    default:        return "ear-outline";
+  }
+}
 
 export default function ReceiverScreen() {
   const colorScheme = useColorScheme();
   const dark = colorScheme === "dark";
 
-  const [serverUrl, setServerUrl] = useState("ws://192.168.31.26:8080");
-  const [pin, setPin] = useState("");
+  const [serverUrl,   setServerUrl]   = useState("ws://192.168.31.26:8080");
+  const [pin,         setPin]         = useState("");
+  const [audioOutput, setLocalOutput] = useState<AudioOutput>("earpiece");
 
-  const { status, error, joinRoom, disconnect } = useWebRTC({ role: "receiver" });
+  const { status, error, joinRoom, disconnect, setAudioOutput } = useWebRTC({
+    role: "receiver",
+    audioOutput,
+  });
+
+  const handleOutputChange = (o: AudioOutput) => {
+    setLocalOutput(o);
+    setAudioOutput(o);
+  };
 
   const statusConfig = {
-    idle:       { label: "Ready",              color: dark ? "text-zinc-500" : "text-zinc-400" },
-    connecting: { label: "Connecting...",      color: "text-yellow-500" },
-    waiting:    { label: "Joining room...",    color: "text-blue-500" },
-    receiving:  { label: "Receiving",          color: "text-emerald-500" },
-    live:       { label: "Live",               color: "text-emerald-500" },
-    error:      { label: "Error",              color: "text-red-500" },
+    idle:       { label: "Ready",           color: dark ? "text-zinc-500" : "text-zinc-400" },
+    connecting: { label: "Connecting...",   color: "text-yellow-500" },
+    waiting:    { label: "Joining room...", color: "text-blue-500" },
+    receiving:  { label: "Receiving",       color: "text-emerald-500" },
+    live:       { label: "Live",            color: "text-emerald-500" },
+    error:      { label: "Error",           color: "text-red-500" },
   };
 
   const isActive = status !== "idle" && status !== "error";
+
+  const OUTPUT_OPTIONS: { label: string; value: AudioOutput }[] = [
+    { label: "Qulaq",   value: "earpiece" },
+    { label: "Speaker", value: "speaker"  },
+    { label: "Nauşnik", value: "headset"  },
+  ];
 
   return (
     <SafeAreaView className={`flex-1 ${dark ? "bg-zinc-950" : "bg-zinc-50"}`}>
@@ -33,11 +89,8 @@ export default function ReceiverScreen() {
       <View className="flex-1 px-6 pt-4">
 
         {/* Header */}
-        <View className="flex-row items-center mb-10">
-          <Pressable
-            onPress={() => router.back()}
-            className="mr-4 p-2 -ml-2 active:opacity-60"
-          >
+        <View className="flex-row items-center mb-8">
+          <Pressable onPress={() => router.back()} className="mr-4 p-2 -ml-2 active:opacity-60">
             <Ionicons name="arrow-back" size={22} color={dark ? "#a1a1aa" : "#71717a"} />
           </Pressable>
           <View>
@@ -48,7 +101,6 @@ export default function ReceiverScreen() {
               {statusConfig[status].label}
             </Text>
           </View>
-
           {status === "receiving" && (
             <View className="ml-auto flex-row items-center gap-1.5 bg-emerald-500/10 px-3 py-1.5 rounded-full">
               <View className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -58,7 +110,7 @@ export default function ReceiverScreen() {
         </View>
 
         {/* Server URL */}
-        <View className="mb-6">
+        <View className="mb-4">
           <Text className={`text-xs font-medium tracking-widest uppercase mb-2 ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
             Signaling Server
           </Text>
@@ -71,16 +123,14 @@ export default function ReceiverScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             className={`rounded-xl px-4 py-3.5 text-base border ${
-              dark
-                ? "bg-zinc-900 border-zinc-800 text-white"
-                : "bg-white border-zinc-200 text-zinc-900"
+              dark ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-zinc-200 text-zinc-900"
             }`}
           />
         </View>
 
-        {/* Room Code Input */}
-        <View className="mb-6">
-          <Text className={`text-xs font-medium tracking-widest uppercase mb-3 ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
+        {/* Room Code */}
+        <View className="mb-4">
+          <Text className={`text-xs font-medium tracking-widest uppercase mb-2 ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
             Room Code
           </Text>
           <TextInput
@@ -93,10 +143,21 @@ export default function ReceiverScreen() {
             autoCorrect={false}
             autoComplete="off"
             className={`rounded-xl px-4 py-3.5 text-xl font-bold tracking-widest border ${
-              dark
-                ? "bg-zinc-900 border-zinc-800 text-white"
-                : "bg-white border-zinc-200 text-zinc-900"
+              dark ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-zinc-200 text-zinc-900"
             }`}
+          />
+        </View>
+
+        {/* Audio Output — həmişə dəyişdirilə bilər */}
+        <View className="mb-6">
+          <Text className={`text-xs font-medium tracking-widest uppercase mb-2 ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
+            Səs Çıxışı
+          </Text>
+          <SegmentControl
+            options={OUTPUT_OPTIONS}
+            value={audioOutput}
+            onChange={handleOutputChange}
+            dark={dark}
           />
         </View>
 
@@ -125,22 +186,19 @@ export default function ReceiverScreen() {
           </View>
         )}
 
-        {/* Receiving state */}
+        {/* Receiving */}
         {status === "receiving" && (
-          <View className="mt-10 items-center gap-4">
+          <View className="mt-6 items-center gap-4">
             <View className={`w-20 h-20 rounded-full items-center justify-center ${dark ? "bg-zinc-900" : "bg-zinc-100"}`}>
-              <Ionicons name="headset-outline" size={36} color={dark ? "#34d399" : "#10b981"} />
+              <Ionicons name={outputIcon(audioOutput)} size={36} color={dark ? "#34d399" : "#10b981"} />
             </View>
             <Text className={`text-sm ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
               Receiving audio...
             </Text>
             <View className="flex-row items-end gap-1 h-8">
               {[0.5, 0.8, 0.6, 1, 0.7, 0.9, 0.4].map((h, i) => (
-                <View
-                  key={i}
-                  className="w-2 bg-emerald-400 rounded-full"
-                  style={{ height: `${h * 100}%`, opacity: 0.6 + i * 0.05 }}
-                />
+                <View key={i} className="w-2 bg-emerald-400 rounded-full"
+                  style={{ height: `${h * 100}%`, opacity: 0.6 + i * 0.05 }} />
               ))}
             </View>
           </View>

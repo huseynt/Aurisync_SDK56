@@ -1,18 +1,68 @@
-import { View, Text, TextInput, Pressable, StatusBar, ActivityIndicator } from "react-native";
+import {
+  View, Text, TextInput, Pressable,
+  StatusBar, ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useWebRTC } from "@/hooks/useWebRTC";
+import { useWebRTC, AudioInput } from "@/hooks/useWebRTC";
 
+// ─── SegmentControl ──────────────────────────────────────────────────────────
+function SegmentControl<T extends string>({
+  options, value, onChange, disabled, dark,
+}: {
+  options: { label: string; value: T }[];
+  value: T;
+  onChange: (v: T) => void;
+  disabled?: boolean;
+  dark: boolean;
+}) {
+  return (
+    <View
+      className={`flex-row rounded-xl p-1 ${
+        dark ? "bg-zinc-800" : "bg-zinc-200"
+      } ${disabled ? "opacity-40" : ""}`}
+    >
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => !disabled && onChange(o.value)}
+            className={`flex-1 py-2 rounded-lg items-center ${
+              active ? (dark ? "bg-zinc-600" : "bg-white") : ""
+            }`}
+          >
+            <Text
+              className={`text-xs font-medium ${
+                active
+                  ? dark ? "text-white" : "text-zinc-900"
+                  : dark ? "text-zinc-400" : "text-zinc-500"
+              }`}
+            >
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Screen ──────────────────────────────────────────────────────────────────
 export default function SenderScreen() {
   const colorScheme = useColorScheme();
   const dark = colorScheme === "dark";
 
-  const [serverUrl, setServerUrl] = useState("ws://192.168.31.26:8080");
+  const [serverUrl,  setServerUrl]  = useState("ws://192.168.31.26:8080");
+  const [audioInput, setAudioInput] = useState<AudioInput>("mic");
 
-  const { status, pin, error, createRoom, disconnect } = useWebRTC({ role: "sender" });
+  const { status, pin, error, createRoom, disconnect } = useWebRTC({
+    role: "sender",
+    audioInput,
+  });
 
   const statusConfig = {
     idle:       { label: "Ready",                  color: dark ? "text-zinc-500" : "text-zinc-400" },
@@ -24,6 +74,12 @@ export default function SenderScreen() {
   };
 
   const isActive = status !== "idle" && status !== "error";
+
+  const INPUT_OPTIONS: { label: string; value: AudioInput }[] = [
+    { label: "Mic",      value: "mic"      },
+    { label: "Daxili",   value: "internal" },
+    { label: "Hər ikisi", value: "both"   },
+  ];
 
   return (
     <SafeAreaView className={`flex-1 ${dark ? "bg-zinc-950" : "bg-zinc-50"}`}>
@@ -74,6 +130,20 @@ export default function SenderScreen() {
                 ? "bg-zinc-900 border-zinc-800 text-white"
                 : "bg-white border-zinc-200 text-zinc-900"
             }`}
+          />
+        </View>
+
+        {/* Audio Input selector */}
+        <View className="mb-6">
+          <Text className={`text-xs font-medium tracking-widest uppercase mb-2 ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
+            Səs Girişi
+          </Text>
+          <SegmentControl
+            options={INPUT_OPTIONS}
+            value={audioInput}
+            onChange={setAudioInput}
+            disabled={isActive}
+            dark={dark}
           />
         </View>
 
@@ -133,6 +203,9 @@ export default function SenderScreen() {
             </View>
             <Text className={`text-sm ${dark ? "text-zinc-500" : "text-zinc-400"}`}>
               Streaming audio...
+            </Text>
+            <Text className={`text-xs mt-1 ${dark ? "text-zinc-600" : "text-zinc-500"}`}>
+              Giriş: {audioInput === "mic" ? "Mikrofon" : audioInput === "internal" ? "Daxili" : "Hər ikisi"}
             </Text>
           </View>
         )}

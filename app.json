@@ -11,7 +11,8 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Aurisync uses the microphone to stream audio in real time."
+        "NSMicrophoneUsageDescription": "Aurisync uses the microphone to stream audio in real time.",
+        "UIBackgroundModes": ["audio"]
       }
     },
 
@@ -28,7 +29,9 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.INTERNET",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
       ]
     },
 
@@ -50,13 +53,6 @@
           }
         }
       ]
-      // [
-      //   "react-native-webrtc",
-      //   {
-      //     "cameraPermission": false,
-      //     "microphonePermission": "Aurisync uses the microphone to stream audio in real time."
-      //   }
-      // ]
     ],
 
     "experiments": {
